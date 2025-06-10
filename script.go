@@ -69,7 +69,7 @@ func bbc() <-chan [][]string {
 			panic(err)
 		}
 
-		re := regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<h2 data-testid="card-headline".*?>(.*?)</h2>`)
+		re := regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<h2 data-testid="card-headline".*?>([^</]*?)</h2>`)
 
 		ret <- re.FindAllStringSubmatch(string(body), -1)
 		close(ret)
@@ -97,7 +97,7 @@ func theguardian() chan [][]string {
 			panic(err)
 		}
 
-		re := regexp.MustCompile(`<a href="([^"]*)".*?aria-label="(.*?)".*?></a>`)
+		re := regexp.MustCompile(`<a href="([^"]*)".*?aria-label="([^"]*)".*?></a>`)
 		ret <- re.FindAllStringSubmatch(string(body), -1)
 		close(ret)
 	}()
@@ -123,12 +123,64 @@ func nytimes() chan [][]string {
 			panic(err)
 		}
 
-		re := regexp.MustCompile(`<div class="css-cfnhvx"><a.*?href="([^"]*)"><div.*?><p.*?>([A-Za-z0-9 ]+)</p></div></a></div>`)
+		re := regexp.MustCompile(`<div class="css-cfnhvx"><a.*?href="([^"]*)"><div.*?><p.*?>([^</]*?)</p></div></a></div>`)
 		ret <- re.FindAllStringSubmatch(string(body), -1)
 		close(ret)
 	}()
 
 	return ret
+}
+
+func abc() <-chan [][]string {
+	ret := make(chan [][]string)
+
+	go func() {
+		url := "https://abcnews.go.com"
+		resp, err := http.Get(url + "/International")
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
+
+		re := regexp.MustCompile(`<h2><a.*?href="([^"]*)".*?>.*?([^</]*?)</a></h2>`)
+
+		ret <- re.FindAllStringSubmatch(string(body), -1)
+		close(ret)
+	}()
+
+	return ret
+
+}
+
+func alijazeera() <-chan [][]string {
+	ret := make(chan [][]string)
+
+	go func() {
+		url := "https://www.aljazeera.com"
+		resp, err := http.Get(url)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
+
+		re := regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<span>([^</]*?)</span></a>`)
+
+		ret <- re.FindAllStringSubmatch(string(body), -1)
+		close(ret)
+	}()
+
+	return ret
+
 }
 
 func scan() {
@@ -138,10 +190,12 @@ func scan() {
 	bbc_rF := bbc()
 	tgF := theguardian()
 	nytF := nytimes()
+	abcF := abc()
 
 	bbc_r := <-bbc_rF
 	tg := <-tgF
 	nyt := <-nytF
+	abcl := <-abcF
 
 	for _, match := range bbc_r {
 		if len(match) > 2 && any_contains(match, cl) {
@@ -158,8 +212,25 @@ func scan() {
 	}
 
 	for _, match := range nyt {
-		if len(match) > 2 {
+		if len(match) > 2 && any_contains(match, cl) {
 			fmt.Println(match[2] + " --> " + match[1])
+			fmt.Println()
+		}
+	}
+
+	for _, match := range abcl {
+		if len(match) > 2 && any_contains(match, cl) {
+			fmt.Println(match[2] + " --> " + match[1])
+			fmt.Println()
+		}
+	}
+
+	azF := alijazeera()
+	az := <-azF
+
+	for _, match := range az {
+		if len(match) > 2 && any_contains(match, cl) {
+			fmt.Println(match[2] + " --> https://www.aljazeera.com" + match[1])
 			fmt.Println()
 		}
 	}
