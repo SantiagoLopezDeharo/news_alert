@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func saveList(filename string, list []string) error {
@@ -52,67 +53,95 @@ func any_contains(s []string, cl []string) bool {
 	return false
 }
 
-func bbc() [][]string {
-	url := "https://www.bbc.com"
-	resp, err := http.Get(url + "/news")
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
+func bbc() <-chan [][]string {
+	ret := make(chan [][]string)
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
+	go func() {
+		url := "https://www.bbc.com"
+		resp, err := http.Get(url + "/news")
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
 
-	re := regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<h2 data-testid="card-headline".*?>(.*?)</h2>`)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
 
-	return re.FindAllStringSubmatch(string(body), -1)
+		re := regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<h2 data-testid="card-headline".*?>(.*?)</h2>`)
+
+		ret <- re.FindAllStringSubmatch(string(body), -1)
+		close(ret)
+	}()
+
+	return ret
 
 }
 
-func theguardian() [][]string {
-	url := "https://www.theguardian.com"
-	resp, err := http.Get(url + "/international")
+func theguardian() chan [][]string {
+	ret := make(chan [][]string)
 
-	if err != nil {
-		panic(err)
-	}
+	go func() {
+		url := "https://www.theguardian.com"
+		resp, err := http.Get(url + "/international")
 
-	defer resp.Body.Close()
+		if err != nil {
+			panic(err)
+		}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
+		defer resp.Body.Close()
 
-	re := regexp.MustCompile(`<a href="([^"]*)".*?aria-label="(.*?)".*?></a>`)
-	return re.FindAllStringSubmatch(string(body), -1)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
+
+		re := regexp.MustCompile(`<a href="([^"]*)".*?aria-label="(.*?)".*?></a>`)
+		ret <- re.FindAllStringSubmatch(string(body), -1)
+		close(ret)
+	}()
+
+	return ret
 }
 
-func nytimes() [][]string {
-	url := "https://www.nytimes.com"
-	resp, err := http.Get(url + "/international")
+func nytimes() chan [][]string {
+	ret := make(chan [][]string)
 
-	if err != nil {
-		panic(err)
-	}
+	go func() {
+		url := "https://www.nytimes.com"
+		resp, err := http.Get(url + "/international")
 
-	defer resp.Body.Close()
+		if err != nil {
+			panic(err)
+		}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
+		defer resp.Body.Close()
 
-	re := regexp.MustCompile(`<div class="css-cfnhvx"><a.*?href="([^"]*)"><div.*?><p.*?>([A-Za-z0-9 ]+)</p></div></a></div>`)
-	return re.FindAllStringSubmatch(string(body), -1)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			panic(err)
+		}
+
+		re := regexp.MustCompile(`<div class="css-cfnhvx"><a.*?href="([^"]*)"><div.*?><p.*?>([A-Za-z0-9 ]+)</p></div></a></div>`)
+		ret <- re.FindAllStringSubmatch(string(body), -1)
+		close(ret)
+	}()
+
+	return ret
 }
 
-func main() {
+func scan() {
+
 	cl, _ := loadList("list.json")
 
-	bbc_r := bbc()
+	bbc_rF := bbc()
+	tgF := theguardian()
+	nytF := nytimes()
+
+	bbc_r := <-bbc_rF
+	tg := <-tgF
+	nyt := <-nytF
 
 	for _, match := range bbc_r {
 		if len(match) > 2 && any_contains(match, cl) {
@@ -121,16 +150,12 @@ func main() {
 		}
 	}
 
-	tg := theguardian()
-
 	for _, match := range tg {
 		if len(match) > 2 && any_contains(match, cl) {
 			fmt.Println(match[2] + " -->  www.theguardian.com" + match[1])
 			fmt.Println()
 		}
 	}
-
-	nyt := nytimes()
 
 	for _, match := range nyt {
 		if len(match) > 2 {
@@ -139,4 +164,12 @@ func main() {
 		}
 	}
 
+	time.Sleep(6 * time.Hour)
+
+}
+
+func main() {
+	for {
+		scan()
+	}
 }
