@@ -1,14 +1,22 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+
+	firebase "firebase.google.com/go"
+	"firebase.google.com/go/messaging"
+
 	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"google.golang.org/api/option"
 )
 
 func saveList(filename string, list []string) error {
@@ -191,11 +199,13 @@ func scan() {
 	tgF := theguardian()
 	nytF := nytimes()
 	abcF := abc()
+	azF := alijazeera()
 
 	bbc_r := <-bbc_rF
 	tg := <-tgF
 	nyt := <-nytF
 	abcl := <-abcF
+	az := <-azF
 
 	for _, match := range bbc_r {
 		if len(match) > 2 && any_contains(match, cl) {
@@ -225,9 +235,6 @@ func scan() {
 		}
 	}
 
-	azF := alijazeera()
-	az := <-azF
-
 	for _, match := range az {
 		if len(match) > 2 && any_contains(match, cl) {
 			fmt.Println(match[2] + " --> https://www.aljazeera.com" + match[1])
@@ -235,11 +242,55 @@ func scan() {
 		}
 	}
 
+	fmt.Println("End.")
 	time.Sleep(6 * time.Hour)
 
 }
 
 func main() {
+	opt := option.WithCredentialsFile("news-alert-251e3-firebase-adminsdk-fbsvc-89b07f6e47.json")
+
+	// Initialize Firebase app
+	conf := &firebase.Config{ProjectID: "news-alert-251e3"}
+	app, err := firebase.NewApp(context.Background(), conf, opt)
+	if err != nil {
+		log.Fatalf("error initializing Firebase app: %v", err)
+	}
+
+	// Initialize Messaging client
+	ctx := context.Background()
+	client, err := app.Messaging(ctx)
+	if err != nil {
+		log.Fatalf("error getting Messaging client: %v", err)
+	}
+
+	// Create a test message
+	message := &messaging.Message{
+		Token: "",
+		Notification: &messaging.Notification{
+			Title: "Título",
+			Body:  "Tocame para ir al link",
+		},
+		Android: &messaging.AndroidConfig{
+			Priority: "high",
+			Notification: &messaging.AndroidNotification{
+				ClickAction: "FLUTTER_NOTIFICATION_CLICK",
+			},
+		},
+		Data: map[string]string{
+			"link": "https://github.com/SantiagoLopezDeharo/news_alert",
+			"sape": "SApeeee",
+		},
+	}
+
+	// Send the message
+	response, err := client.Send(ctx, message)
+	if err != nil {
+		log.Fatalf("error sending push notification: %v", err)
+	}
+
+	fmt.Printf("Successfully sent message: %s\n", response)
+
 	for {
 		scan()
 	}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "376711030206",
+    "project_id": "news-alert-251e3",
+    "storage_bucket": "news-alert-251e3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:376711030206:android:0c32a49e002c8211ac45ef",
+        "android_client_info": {
+          "package_name": "com.slincsilver.news_alert"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD9YANLpZ1RbBv3eMClJZgRNSlisw1ba7k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
