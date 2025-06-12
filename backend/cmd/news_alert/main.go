@@ -8,7 +8,7 @@ import (
 	"news_alert_backend/internal/api"
 	"news_alert_backend/internal/fetcher"
 
-	firebase "firebase.google.com/go"
+	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/option"
 )
 

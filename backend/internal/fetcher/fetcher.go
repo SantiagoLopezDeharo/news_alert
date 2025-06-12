@@ -11,8 +11,43 @@ import (
 	"sync"
 	"time"
 
-	"firebase.google.com/go/messaging"
+	"firebase.google.com/go/v4/messaging"
 )
+
+func splitIntoChunks[T any](input []T, chunkSize int) [][]T {
+	var chunks [][]T
+	for i := 0; i < len(input); i += chunkSize {
+		end := i + chunkSize
+		if end > len(input) {
+			end = len(input)
+		}
+		chunks = append(chunks, input[i:end])
+	}
+	return chunks
+}
+
+func generateMessages(matches [][]string, cl []string, prefix string, token string) []*messaging.Message {
+
+	ret := []*messaging.Message{}
+	if len(matches) == 0 {
+		return ret
+	}
+
+	for _, match := range matches {
+		if len(match) > 2 && utils.AnyContains(match, cl) {
+			title := match[2]
+			link := match[1]
+			if prefix != "" {
+				link = prefix + link
+			}
+			// fmt.Println(title + " --> " + link)
+			// fmt.Println()
+			ret = append(ret, notifier.GenerateMessage(title, link, token))
+		}
+	}
+
+	return ret
+}
 
 func Scan(listFile string, ctx context.Context, client *messaging.Client) {
 	cl, _ := utils.LoadList(listFile)
@@ -30,47 +65,39 @@ func Scan(listFile string, ctx context.Context, client *messaging.Client) {
 
 	wg.Wait()
 
-	wg.Add(5)
-
-	go func() { defer wg.Done(); printMatches(bbc_r, cl, "www.bbc.com", ctx, client) }()
-	go func() { defer wg.Done(); printMatches(tg, cl, "www.theguardian.com", ctx, client) }()
-	go func() { defer wg.Done(); printMatches(nyt, cl, "", ctx, client) }()
-	go func() { defer wg.Done(); printMatches(abcl, cl, "", ctx, client) }()
-	go func() { defer wg.Done(); printMatches(az, cl, "https://www.aljazeera.com", ctx, client) }()
-	wg.Wait()
-
-	fmt.Println("Scan Ended at ", time.Now())
-}
-
-func printMatches(matches [][]string, cl []string, prefix string, ctx context.Context, client *messaging.Client) {
-	var wg sync.WaitGroup
-
 	tokenBytes, err := ioutil.ReadFile("fcm_token.txt")
 	if err != nil {
 		fmt.Println("Error reading FCM token:", err)
 		return
 	}
+
 	token := string(tokenBytes)
 
-	for _, match := range matches {
-		if len(match) > 2 && utils.AnyContains(match, cl) {
-			title := match[2]
-			link := match[1]
-			if prefix != "" {
-				link = prefix + link
-			}
-			// fmt.Println(title + " --> " + link)
-			// fmt.Println()
+	msgs := []*messaging.Message{}
 
-			wg.Add(1)
-			go func(title, link string) {
-				defer wg.Done()
-				notifier.SendNotification(ctx, client, title, link, token)
-			}(title, link)
+	msgs = append(msgs, generateMessages(bbc_r, cl, "https://www.bbc.com", token)...)
+	msgs = append(msgs, generateMessages(tg, cl, "https://www.theguardian.com", token)...)
+	msgs = append(msgs, generateMessages(nyt, cl, "https://www.nytimes.com", token)...)
+	msgs = append(msgs, generateMessages(abcl, cl, "https://abcnews.go.com", token)...)
+	msgs = append(msgs, generateMessages(az, cl, "https://www.aljazeera.com", token)...)
+
+	chunks := splitIntoChunks(msgs, 500) // Relisticly for this use case there will never be more than 500 messages at a time, but this is a good practice anyways since Firebase won't admit to send a batch larger than 500 messages at once and it doesn't hurt performance.
+
+	wg.Add(len(chunks))
+
+	for _, chunk := range chunks {
+		if len(chunk) == 0 {
+			wg.Done()
+			continue
 		}
+		go func(c []*messaging.Message) {
+			defer wg.Done()
+			notifier.SendNotifications(ctx, client, c)
+		}(chunk)
 	}
 
 	wg.Wait()
+	fmt.Println("Scan completed at ", time.Now())
 }
 func bbc() <-chan [][]string {
 	ret := make(chan [][]string)
