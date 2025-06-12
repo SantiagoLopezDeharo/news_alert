@@ -244,7 +244,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (ok != true) return;
     final db = await _DatabaseProvider.instance.database;
     await db.delete('messages');
-    setState(() => _messages.clear());
+     _messages.clear();
+    setState(() => _messagesRender.clear());
   }
 
   @override
