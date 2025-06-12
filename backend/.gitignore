@@ -33,5 +33,6 @@ go.work.sum
 
 list.json
 news-alert-251e3-firebase-adminsdk-fbsvc-89b07f6e47.json
+fcm_token.txt
 
 *.html

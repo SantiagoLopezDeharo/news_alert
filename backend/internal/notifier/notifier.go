@@ -2,15 +2,14 @@ package notifier
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"firebase.google.com/go/messaging"
 )
 
-func SendNotification(ctx context.Context, client *messaging.Client, title string, link string) {
+func SendNotification(ctx context.Context, client *messaging.Client, title string, link string, token string) {
 	message := &messaging.Message{
-		Token: "f3_HeTyeRf6ziBgSSouUfN:APA91bGnLAgKDprvB1f8sCWYwyKKdXFVRllDbNtZp8oGDXDTwy-QqeKuqR12t3HnlI20tj2uUQs7CnwFZnzhd1RUDukgv3d_9hGLgBA-kcU3SanPVqqmtfw",
+		Token: token,
 		Notification: &messaging.Notification{
 			Title: title,
 			Body:  link,
@@ -26,10 +25,10 @@ func SendNotification(ctx context.Context, client *messaging.Client, title strin
 		},
 	}
 
-	response, err := client.Send(ctx, message)
+	_, err := client.Send(ctx, message)
 	if err != nil {
 		log.Fatalf("error sending push notification: %v", err)
 	}
 
-	fmt.Printf("Successfully sent message: %s\n", response)
+	//fmt.Printf("Successfully sent message: %s\n", response)
 }

@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"news_alert_backend/internal/api"
 	"news_alert_backend/internal/fetcher"
 
 	firebase "firebase.google.com/go"
@@ -24,6 +25,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("error getting Messaging client: %v", err)
 	}
+
+	go api.StartServer()
 
 	for {
 		fetcher.Scan("list.json", ctx, client)

@@ -42,6 +42,13 @@ func Scan(listFile string, ctx context.Context, client *messaging.Client) {
 func printMatches(matches [][]string, cl []string, prefix string, ctx context.Context, client *messaging.Client) {
 	var wg sync.WaitGroup
 
+	tokenBytes, err := ioutil.ReadFile("fcm_token.txt")
+	if err != nil {
+		fmt.Println("Error reading FCM token:", err)
+		return
+	}
+	token := string(tokenBytes)
+
 	for _, match := range matches {
 		if len(match) > 2 && utils.AnyContains(match, cl) {
 			title := match[2]
@@ -49,20 +56,19 @@ func printMatches(matches [][]string, cl []string, prefix string, ctx context.Co
 			if prefix != "" {
 				link = prefix + link
 			}
-			fmt.Println(title + " --> " + link)
-			fmt.Println()
+			// fmt.Println(title + " --> " + link)
+			// fmt.Println()
 
 			wg.Add(1)
 			go func(title, link string) {
 				defer wg.Done()
-				notifier.SendNotification(ctx, client, title, link)
+				notifier.SendNotification(ctx, client, title, link, token)
 			}(title, link)
 		}
 	}
 
 	wg.Wait()
 }
-
 func bbc() <-chan [][]string {
 	ret := make(chan [][]string)
 
