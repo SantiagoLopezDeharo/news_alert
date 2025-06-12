@@ -9,6 +9,7 @@ import (
 func StartServer() {
 	http.HandleFunc("/update-list", updateListHandler)
 	http.HandleFunc("/update-token", updateTokenHandler)
+	http.HandleFunc("/get-list", getListHandler)
 	http.ListenAndServe(":8080", nil)
 }
 
@@ -47,6 +48,20 @@ func updateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func getListHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	data, err := ioutil.ReadFile("list.json")
+	if err != nil {
+		http.Error(w, "Failed to read list.json", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
 }
 
 func mustJSON(v interface{}) []byte {
