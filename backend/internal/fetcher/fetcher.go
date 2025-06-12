@@ -1,15 +1,20 @@
 package fetcher
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"news_alert_backend/internal/notifier"
 	"news_alert_backend/internal/utils"
 	"regexp"
 	"sync"
+	"time"
+
+	"firebase.google.com/go/messaging"
 )
 
-func Scan(listFile string) {
+func Scan(listFile string, ctx context.Context, client *messaging.Client) {
 	cl, _ := utils.LoadList(listFile)
 
 	var wg sync.WaitGroup
@@ -25,16 +30,18 @@ func Scan(listFile string) {
 
 	wg.Wait()
 
-	printMatches(bbc_r, cl, "www.bbc.com")
-	printMatches(tg, cl, "www.theguardian.com")
-	printMatches(nyt, cl, "")
-	printMatches(abcl, cl, "")
-	printMatches(az, cl, "https://www.aljazeera.com")
+	printMatches(bbc_r, cl, "www.bbc.com", ctx, client)
+	printMatches(tg, cl, "www.theguardian.com", ctx, client)
+	printMatches(nyt, cl, "", ctx, client)
+	printMatches(abcl, cl, "", ctx, client)
+	printMatches(az, cl, "https://www.aljazeera.com", ctx, client)
 
-	fmt.Println("End.")
+	fmt.Println("Scan Ended at ", time.Now())
 }
 
-func printMatches(matches [][]string, cl []string, prefix string) {
+func printMatches(matches [][]string, cl []string, prefix string, ctx context.Context, client *messaging.Client) {
+	var wg sync.WaitGroup
+
 	for _, match := range matches {
 		if len(match) > 2 && utils.AnyContains(match, cl) {
 			title := match[2]
@@ -44,8 +51,16 @@ func printMatches(matches [][]string, cl []string, prefix string) {
 			}
 			fmt.Println(title + " --> " + link)
 			fmt.Println()
+
+			wg.Add(1)
+			go func(title, link string) {
+				defer wg.Done()
+				notifier.SendNotification(ctx, client, title, link)
+			}(title, link)
 		}
 	}
+
+	wg.Wait()
 }
 
 func bbc() <-chan [][]string {

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"news_alert_backend/internal/fetcher"
-	"news_alert_backend/internal/notifier"
 
 	firebase "firebase.google.com/go"
 	"google.golang.org/api/option"
@@ -26,10 +25,8 @@ func main() {
 		log.Fatalf("error getting Messaging client: %v", err)
 	}
 
-	notifier.SendNotification(ctx, client, "Probando titulo", "https://www.twitch.com")
-
 	for {
-		fetcher.Scan("list.json")
-		time.Sleep(6 * time.Hour)
+		fetcher.Scan("list.json", ctx, client)
+		time.Sleep(12 * time.Hour)
 	}
 }
