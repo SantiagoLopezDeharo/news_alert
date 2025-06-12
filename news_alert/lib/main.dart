@@ -254,41 +254,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            searchKeys != null
-                ? DropdownButton<String>(
-                    dropdownColor: const Color.fromARGB(255, 196, 196, 196),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
-                    ),
-                    value: selectedKey,
-                    items: searchKeys!
-                        .map((e) => DropdownMenuItem(
-                              value: e,
-                              child: Text(
-                                e,
-                                textAlign: TextAlign.center,
-                              ),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      selectedKey = value ?? selectedKey;
-                      _messagesRender = _messages
-                          .where(
-                            (msg) =>
-                                selectedKey == "All" ||
-                                msg['title']
-                                        ?.toLowerCase()
-                                        .contains(selectedKey) ==
-                                    true,
-                          )
-                          .toList();
-                      setState(() {});
-                    },
-                  )
-                : const CircularProgressIndicator(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                searchKeys != null
+                    ? DropdownButton<String>(
+                        dropdownColor: const Color.fromARGB(255, 196, 196, 196),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                        value: selectedKey,
+                        items: searchKeys!
+                            .map((e) => DropdownMenuItem(
+                                  value: e,
+                                  child: Text(
+                                    e,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ))
+                            .toList(),
+                        onChanged: (value) {
+                          selectedKey = value ?? selectedKey;
+                          _messagesRender = _messages
+                              .where(
+                                (msg) =>
+                                    selectedKey == "All" ||
+                                    msg['title']
+                                            ?.toLowerCase()
+                                            .contains(selectedKey) ==
+                                        true,
+                              )
+                              .toList();
+                          setState(() {});
+                        },
+                      )
+                    : const CircularProgressIndicator(),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {},
+                  child: const Text('Modify'),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             ElevatedButton(
                 onPressed: delete, child: const Text("Borrar historial")),

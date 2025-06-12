@@ -30,11 +30,14 @@ func Scan(listFile string, ctx context.Context, client *messaging.Client) {
 
 	wg.Wait()
 
-	printMatches(bbc_r, cl, "www.bbc.com", ctx, client)
-	printMatches(tg, cl, "www.theguardian.com", ctx, client)
-	printMatches(nyt, cl, "", ctx, client)
-	printMatches(abcl, cl, "", ctx, client)
-	printMatches(az, cl, "https://www.aljazeera.com", ctx, client)
+	wg.Add(5)
+
+	go func() { defer wg.Done(); printMatches(bbc_r, cl, "www.bbc.com", ctx, client) }()
+	go func() { defer wg.Done(); printMatches(tg, cl, "www.theguardian.com", ctx, client) }()
+	go func() { defer wg.Done(); printMatches(nyt, cl, "", ctx, client) }()
+	go func() { defer wg.Done(); printMatches(abcl, cl, "", ctx, client) }()
+	go func() { defer wg.Done(); printMatches(az, cl, "https://www.aljazeera.com", ctx, client) }()
+	wg.Wait()
 
 	fmt.Println("Scan Ended at ", time.Now())
 }
