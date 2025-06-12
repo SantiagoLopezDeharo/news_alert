@@ -8,6 +8,7 @@ import (
 	"news_alert_backend/internal/notifier"
 	"news_alert_backend/internal/utils"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,9 +38,10 @@ func generateMessages(matches [][]string, cl []string, prefix string, token stri
 		if len(match) > 2 && utils.AnyContains(match, cl) {
 			title := match[2]
 			link := match[1]
-			if prefix != "" {
+			if !strings.Contains(link, prefix) {
 				link = prefix + link
 			}
+
 			// fmt.Println(title + " --> " + link)
 			// fmt.Println()
 			ret = append(ret, notifier.GenerateMessage(title, link, token))
