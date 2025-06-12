@@ -6,6 +6,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -28,6 +30,7 @@ void main() async {
   await Firebase.initializeApp();
   await _DatabaseProvider.instance.init();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await dotenv.load();
 
   runApp(
     const MaterialApp(
@@ -78,18 +81,70 @@ void setupFCM() async {
   FirebaseMessaging messaging = FirebaseMessaging.instance;
 
   String? token = await messaging.getToken();
-  print("Token FCM: $token");
+
+  final apiUrl = dotenv.env['API_URL'];
+
+  if (token != null && apiUrl != null) {
+    final url = Uri.parse('$apiUrl/update-token');
+    await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: '{"token": "$token"}',
+    );
+  }
 
   await FirebaseMessaging.instance.requestPermission();
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _messagesRender = [];
+
+  List<String>? searchKeys;
+  String selectedKey = "All";
+
+  void loadKeys() async {
+    final apiUrl = dotenv.env['API_URL'];
+    if (apiUrl == null) return;
+    final url = Uri.parse('$apiUrl/get-list');
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      final data = response.body;
+      List<String> keys = [];
+      keys.add("All");
+
+      keys.addAll(
+        List<String>.from(
+          jsonDecode(data),
+        ),
+      );
+      selectedKey = keys.isNotEmpty ? keys[0] : "All";
+      setState(() {
+        searchKeys = keys;
+      });
+    } else {
+      showDialog(
+          context: context,
+          builder: (_) {
+            return AlertDialog(
+              title: const Text('Error'),
+              content: const Text(
+                  'Failed to load search keys. Is possible that the API is not running or the server crushed.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-
+    loadKeys();
     setupFCM();
 
     WidgetsBinding.instance.addObserver(this);
@@ -128,6 +183,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     setState(() {
       _messages = List<Map<String, dynamic>>.from(rows);
+      _messagesRender = _messages
+          .where((msg) =>
+              selectedKey == "All" ||
+              msg['title']?.toLowerCase().contains(selectedKey) == true)
+          .toList();
     });
   }
 
@@ -147,6 +207,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           'title': msg.notification?.title,
         },
       );
+
+      _messagesRender = _messages
+          .where((msg) =>
+              selectedKey == "All" ||
+              msg['title']?.toLowerCase().contains(selectedKey) == true)
+          .toList();
     });
   }
 
@@ -188,20 +254,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            searchKeys != null
+                ? DropdownButton<String>(
+                    dropdownColor: const Color.fromARGB(255, 196, 196, 196),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                    value: selectedKey,
+                    items: searchKeys!
+                        .map((e) => DropdownMenuItem(
+                              value: e,
+                              child: Text(
+                                e,
+                                textAlign: TextAlign.center,
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      selectedKey = value ?? selectedKey;
+                      _messagesRender = _messages
+                          .where(
+                            (msg) =>
+                                selectedKey == "All" ||
+                                msg['title']
+                                        ?.toLowerCase()
+                                        .contains(selectedKey) ==
+                                    true,
+                          )
+                          .toList();
+                      setState(() {});
+                    },
+                  )
+                : const CircularProgressIndicator(),
+            const SizedBox(height: 12),
             ElevatedButton(
                 onPressed: delete, child: const Text("Borrar historial")),
             const SizedBox(height: 12),
             Expanded(
-              child: _messages.isEmpty
+              child: _messagesRender.isEmpty
                   ? const Center(child: Text('No FCM messages received yet.'))
                   : ListView.builder(
-                      itemCount: _messages.length,
+                      itemCount: _messagesRender.length,
                       itemBuilder: (_, i) {
-                        final msg = _messages[i];
+                        final msg = _messagesRender[i];
                         return Card(
                           child: ListTile(
                             key: ValueKey(i),
-                            title: Text(msg['title'] ?? 'No Title'),
+                            title: SelectableText(msg['title'] ?? 'No Title'),
                             subtitle: Text(msg['link'] ?? ''),
                             onTap: () {
                               final l = msg['link'];
