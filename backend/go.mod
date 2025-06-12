@@ -1,4 +1,4 @@
-module news_alert
+module news_alert_backend
 
 go 1.23.0
 
