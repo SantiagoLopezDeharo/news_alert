@@ -11,10 +11,16 @@ import 'package:path/path.dart' as path;
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   final db = await _DatabaseProvider.instance.database;
-  await db.insert(
-    'messages',
-    {'data': jsonEncode(message.data), 'timestamp': DateTime.now().millisecondsSinceEpoch},
-  );
+  if (message.notification != null) {
+    await db.insert(
+      'messages',
+      {
+        'title': message.notification!.title,
+        'link': message.data['link'] ?? '',
+        'timestamp': DateTime.now().millisecondsSinceEpoch
+      },
+    );
+  }
 }
 
 void main() async {
@@ -51,7 +57,8 @@ class _DatabaseProvider {
         await db.execute('''
           CREATE TABLE messages(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data TEXT NOT NULL,
+            title TEXT NOT NULL,
+            link TEXT NOT NULL,
             timestamp INTEGER NOT NULL
           )
         ''');
@@ -67,16 +74,28 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+void setupFCM() async {
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+  String? token = await messaging.getToken();
+  print("Token FCM: $token");
+
+  await FirebaseMessaging.instance.requestPermission();
+}
+
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _messages = [];
 
   @override
   void initState() {
     super.initState();
+
+    setupFCM();
+
     WidgetsBinding.instance.addObserver(this);
     _loadStoredMessages();
 
-    FirebaseMessaging.onMessage.listen((msg) => _addMessage(msg.data));
+    FirebaseMessaging.onMessage.listen((msg) => _addMessage(msg));
     FirebaseMessaging.onMessageOpenedApp.listen((msg) {
       _handleLink(msg.data);
     });
@@ -108,18 +127,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       orderBy: 'timestamp DESC',
     );
     setState(() {
-      _messages = rows
-          .map((row) => jsonDecode(row['data'] as String) as Map<String, dynamic>)
-          .toList();
+      _messages = List<Map<String, dynamic>>.from(rows);
     });
   }
 
-  Future<void> _addMessage(Map<String, dynamic> data) async {
+  Future<void> _addMessage(RemoteMessage msg) async {
     final db = await _DatabaseProvider.instance.database;
     final ts = DateTime.now().millisecondsSinceEpoch;
-    await db.insert('messages', {'data': jsonEncode(data), 'timestamp': ts});
+    await db.insert('messages', {
+      'title': msg.notification?.title,
+      'link': msg.data['link'] ?? '',
+      'timestamp': ts
+    });
     setState(() {
-      _messages.insert(0, data);
+      _messages.insert(
+        0,
+        {
+          ...msg.data,
+          'title': msg.notification?.title,
+        },
+      );
     });
   }
 
@@ -161,7 +188,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            ElevatedButton(onPressed: delete, child: const Text("Borrar historial")),
+            ElevatedButton(
+                onPressed: delete, child: const Text("Borrar historial")),
             const SizedBox(height: 12),
             Expanded(
               child: _messages.isEmpty
@@ -173,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         return Card(
                           child: ListTile(
                             key: ValueKey(i),
-                            title: Text('Message ${i + 1}'),
+                            title: Text(msg['title'] ?? 'No Title'),
                             subtitle: Text(msg['link'] ?? ''),
                             onTap: () {
                               final l = msg['link'];

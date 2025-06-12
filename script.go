@@ -14,6 +14,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"google.golang.org/api/option"
@@ -192,20 +193,35 @@ func alijazeera() <-chan [][]string {
 }
 
 func scan() {
-
 	cl, _ := loadList("list.json")
 
-	bbc_rF := bbc()
-	tgF := theguardian()
-	nytF := nytimes()
-	abcF := abc()
-	azF := alijazeera()
+	var wg sync.WaitGroup
+	wg.Add(5)
 
-	bbc_r := <-bbc_rF
-	tg := <-tgF
-	nyt := <-nytF
-	abcl := <-abcF
-	az := <-azF
+	var bbc_r, tg, nyt, abcl, az [][]string
+
+	go func() {
+		defer wg.Done()
+		bbc_r = <-bbc()
+	}()
+	go func() {
+		defer wg.Done()
+		tg = <-theguardian()
+	}()
+	go func() {
+		defer wg.Done()
+		nyt = <-nytimes()
+	}()
+	go func() {
+		defer wg.Done()
+		abcl = <-abc()
+	}()
+	go func() {
+		defer wg.Done()
+		az = <-alijazeera()
+	}()
+
+	wg.Wait()
 
 	for _, match := range bbc_r {
 		if len(match) > 2 && any_contains(match, cl) {
@@ -213,28 +229,24 @@ func scan() {
 			fmt.Println()
 		}
 	}
-
 	for _, match := range tg {
 		if len(match) > 2 && any_contains(match, cl) {
 			fmt.Println(match[2] + " -->  www.theguardian.com" + match[1])
 			fmt.Println()
 		}
 	}
-
 	for _, match := range nyt {
 		if len(match) > 2 && any_contains(match, cl) {
 			fmt.Println(match[2] + " --> " + match[1])
 			fmt.Println()
 		}
 	}
-
 	for _, match := range abcl {
 		if len(match) > 2 && any_contains(match, cl) {
 			fmt.Println(match[2] + " --> " + match[1])
 			fmt.Println()
 		}
 	}
-
 	for _, match := range az {
 		if len(match) > 2 && any_contains(match, cl) {
 			fmt.Println(match[2] + " --> https://www.aljazeera.com" + match[1])
@@ -244,7 +256,32 @@ func scan() {
 
 	fmt.Println("End.")
 	time.Sleep(6 * time.Hour)
+}
 
+func sendNotification(ctx context.Context, client *messaging.Client, title string, link string) {
+	message := &messaging.Message{
+		Token: "f3_HeTyeRf6ziBgSSouUfN:APA91bGnLAgKDprvB1f8sCWYwyKKdXFVRllDbNtZp8oGDXDTwy-QqeKuqR12t3HnlI20tj2uUQs7CnwFZnzhd1RUDukgv3d_9hGLgBA-kcU3SanPVqqmtfw",
+		Notification: &messaging.Notification{
+			Title: title,
+			Body:  link,
+		},
+		Android: &messaging.AndroidConfig{
+			Priority: "high",
+			Notification: &messaging.AndroidNotification{
+				ClickAction: "FLUTTER_NOTIFICATION_CLICK",
+			},
+		},
+		Data: map[string]string{
+			"link": link,
+		},
+	}
+
+	response, err := client.Send(ctx, message)
+	if err != nil {
+		log.Fatalf("error sending push notification: %v", err)
+	}
+
+	fmt.Printf("Successfully sent message: %s\n", response)
 }
 
 func main() {
@@ -264,32 +301,7 @@ func main() {
 		log.Fatalf("error getting Messaging client: %v", err)
 	}
 
-	// Create a test message
-	message := &messaging.Message{
-		Token: "",
-		Notification: &messaging.Notification{
-			Title: "Título",
-			Body:  "Tocame para ir al link",
-		},
-		Android: &messaging.AndroidConfig{
-			Priority: "high",
-			Notification: &messaging.AndroidNotification{
-				ClickAction: "FLUTTER_NOTIFICATION_CLICK",
-			},
-		},
-		Data: map[string]string{
-			"link": "https://github.com/SantiagoLopezDeharo/news_alert",
-			"sape": "SApeeee",
-		},
-	}
-
-	// Send the message
-	response, err := client.Send(ctx, message)
-	if err != nil {
-		log.Fatalf("error sending push notification: %v", err)
-	}
-
-	fmt.Printf("Successfully sent message: %s\n", response)
+	sendNotification(ctx, client, "Probando titulo", "https://www.twitch.com")
 
 	for {
 		scan()
