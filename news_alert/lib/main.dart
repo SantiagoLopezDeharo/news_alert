@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:news_alert/modifyKeys.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
@@ -294,7 +295,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     : const CircularProgressIndicator(),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    final keysWithoutAll =
+                        searchKeys!.where((k) => k != "All").toList();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => Modifykeys(keys: keysWithoutAll),
+                      ),
+                    ).then((newkeys) {
+                      if (newkeys != null) {
+                        final apiUrl = dotenv.env['API_URL'];
+
+                        final url = Uri.parse('$apiUrl/update-list');
+                        http.post(
+                          url,
+                          headers: {'Content-Type': 'application/json'},
+                          body: jsonEncode(newkeys),
+                        );
+
+                        setState(() {
+                          searchKeys = ["All", ...newkeys];
+                        });
+                      }
+                    });
+                  },
                   child: const Text('Modify'),
                 ),
               ],
