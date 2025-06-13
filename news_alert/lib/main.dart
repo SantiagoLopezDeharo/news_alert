@@ -58,13 +58,10 @@ class _DatabaseProvider {
           CREATE TABLE messages(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
-            link TEXT NOT NULL,
+            link TEXT NOT NULL UNIQUE,
             timestamp INTEGER NOT NULL
           )
         ''');
-        await db.execute(
-          'CREATE UNIQUE INDEX idx_messages_link ON messages(link);',
-        );
       },
     );
   }
@@ -189,6 +186,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _addMessage(RemoteMessage msg) async {
+    if (_messages.any((m) => m["link"] == msg.data['link'])) return;
+
     final db = await _DatabaseProvider.instance.database;
     final ts = DateTime.now().millisecondsSinceEpoch;
     await db.insert(
