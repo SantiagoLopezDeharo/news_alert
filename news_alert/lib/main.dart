@@ -20,8 +20,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       {
         'title': message.notification!.title,
         'link': message.data['link'] ?? '',
-        'timestamp': DateTime.now().millisecondsSinceEpoch
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
       },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
 }
@@ -33,12 +34,7 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await dotenv.load();
 
-  runApp(
-    const MaterialApp(
-      title: 'News Alert',
-      home: HomeScreen(),
-    ),
-  );
+  runApp(const MaterialApp(title: 'News Alert', home: HomeScreen()));
 }
 
 class _DatabaseProvider {
@@ -66,6 +62,9 @@ class _DatabaseProvider {
             timestamp INTEGER NOT NULL
           )
         ''');
+        await db.execute(
+          'CREATE UNIQUE INDEX idx_messages_link ON messages(link);',
+        );
       },
     );
   }
@@ -114,31 +113,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       List<String> keys = [];
       keys.add("All");
 
-      keys.addAll(
-        List<String>.from(
-          jsonDecode(data),
-        ),
-      );
+      keys.addAll(List<String>.from(jsonDecode(data)));
       selectedKey = keys.isNotEmpty ? keys[0] : "All";
       setState(() {
         searchKeys = keys;
       });
     } else {
       showDialog(
-          context: context,
-          builder: (_) {
-            return AlertDialog(
-              title: const Text('Error'),
-              content: const Text(
-                  'Failed to load search keys. Is possible that the API is not running or the server crushed.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
-            );
-          });
+        context: context,
+        builder: (_) {
+          return AlertDialog(
+            title: const Text('Error'),
+            content: const Text(
+              'Failed to load search keys. Is possible that the API is not running or the server crushed.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
     }
   }
 
@@ -178,16 +175,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _loadStoredMessages() async {
     final db = await _DatabaseProvider.instance.database;
-    final rows = await db.query(
-      'messages',
-      orderBy: 'timestamp DESC',
-    );
+    final rows = await db.query('messages', orderBy: 'timestamp DESC');
     setState(() {
       _messages = List<Map<String, dynamic>>.from(rows);
       _messagesRender = _messages
-          .where((msg) =>
-              selectedKey == "All" ||
-              msg['title']?.toLowerCase().contains(selectedKey) == true)
+          .where(
+            (msg) =>
+                selectedKey == "All" ||
+                msg['title']?.toLowerCase().contains(selectedKey) == true,
+          )
           .toList();
     });
   }
@@ -195,24 +191,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _addMessage(RemoteMessage msg) async {
     final db = await _DatabaseProvider.instance.database;
     final ts = DateTime.now().millisecondsSinceEpoch;
-    await db.insert('messages', {
-      'title': msg.notification?.title,
-      'link': msg.data['link'] ?? '',
-      'timestamp': ts
-    });
+    await db.insert(
+      'messages',
+      {
+        'title': msg.notification?.title,
+        'link': msg.data['link'] ?? '',
+        'timestamp': ts,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
     setState(() {
-      _messages.insert(
-        0,
-        {
-          ...msg.data,
-          'title': msg.notification?.title,
-        },
-      );
+      _messages.insert(0, {...msg.data, 'title': msg.notification?.title});
 
       _messagesRender = _messages
-          .where((msg) =>
-              selectedKey == "All" ||
-              msg['title']?.toLowerCase().contains(selectedKey) == true)
+          .where(
+            (msg) =>
+                selectedKey == "All" ||
+                msg['title']?.toLowerCase().contains(selectedKey) == true,
+          )
           .toList();
     });
   }
@@ -227,8 +223,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Confirmation'),
-        content:
-            const Text('Are you sure you want to erase saved news alerts?'),
+        content: const Text(
+          'Are you sure you want to erase saved news alerts?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -244,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (ok != true) return;
     final db = await _DatabaseProvider.instance.database;
     await db.delete('messages');
-     _messages.clear();
+    _messages.clear();
     setState(() => _messagesRender.clear());
   }
 
@@ -270,13 +267,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                         value: selectedKey,
                         items: searchKeys!
-                            .map((e) => DropdownMenuItem(
-                                  value: e,
-                                  child: Text(
-                                    e,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ))
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e,
+                                child: Text(e, textAlign: TextAlign.center),
+                              ),
+                            )
                             .toList(),
                         onChanged: (value) {
                           selectedKey = value ?? selectedKey;
@@ -284,9 +280,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               .where(
                                 (msg) =>
                                     selectedKey == "All" ||
-                                    msg['title']
-                                            ?.toLowerCase()
-                                            .contains(selectedKey) ==
+                                    msg['title']?.toLowerCase().contains(
+                                              selectedKey,
+                                            ) ==
                                         true,
                               )
                               .toList();
@@ -327,11 +323,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 12),
             ElevatedButton(
-                onPressed: delete, child: const Text("Borrar historial")),
+              onPressed: delete,
+              child: const Text("Borrar historial"),
+            ),
             const SizedBox(height: 12),
             Expanded(
               child: _messagesRender.isEmpty
-                  ? const Center(child: Text('No FCM messages received yet.'))
+                  ? const Center(
+                      child: Text('No FCM messages received yet.'),
+                    )
                   : ListView.builder(
                       itemCount: _messagesRender.length,
                       itemBuilder: (_, i) {
