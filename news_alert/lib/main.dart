@@ -239,9 +239,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     if (ok != true) return;
     final db = await _DatabaseProvider.instance.database;
-    await db.delete('messages');
-    _messages.clear();
-    setState(() => _messagesRender.clear());
+    if (selectedKey == "All") {
+      await db.delete('messages');
+      _messages.clear();
+      _messagesRender.clear();
+    } else {
+      await db.delete("messages",
+          where: "title LIKE ?", whereArgs: ["%$selectedKey%"]);
+      _messages.removeWhere(
+        (msg) => msg['title']?.toLowerCase().contains(selectedKey) == true,
+      );
+      _messagesRender = _messages
+          .where(
+            (msg) =>
+                selectedKey == "All" ||
+                msg['title']?.toLowerCase().contains(selectedKey) == true,
+          )
+          .toList();
+    }
+    setState(() {});
   }
 
   @override
