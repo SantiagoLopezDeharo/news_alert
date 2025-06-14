@@ -42,4 +42,6 @@ This will generate the binary, for starting the server simply execute it and it 
 
 For the frnt simple use `flutter build apk` to generate an android package.
 
+## Demo
 
+[Watch the demo video](demo.mp4)
