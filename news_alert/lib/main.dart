@@ -260,6 +260,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {});
   }
 
+  void deleteItem(int index) async {
+    bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Confirmation'),
+        content: const Text('Are you sure you want to delete this new ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+    if (index < 0 || index >= _messagesRender.length) return;
+
+    final db = await _DatabaseProvider.instance.database;
+    final msg = _messagesRender[index];
+    await db.delete(
+      'messages',
+      where: 'link = ?',
+      whereArgs: [msg['link']],
+    );
+    setState(() {
+      _messages.removeWhere((m) => m['link'] == msg['link']);
+      _messagesRender.removeAt(index);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -339,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: delete,
-              child: const Text("Borrar historial"),
+              child: Text("Borrar historial: $selectedKey"),
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -360,6 +395,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               final l = msg['link'];
                               if (l != null) launchUrl(Uri.parse(l));
                             },
+                            onLongPress: () => deleteItem(i),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete),
+                              onPressed: () => deleteItem(i),
+                            ),
                           ),
                         );
                       },
