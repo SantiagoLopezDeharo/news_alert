@@ -1,11 +1,15 @@
 package utils
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
 	"os"
 	"strings"
 )
+
+const MaxLinksHistory = 100 // Only keep the last 100 links per user
 
 func AnyContains(s []string, cl []string) bool {
 	for _, c := range cl {
@@ -48,4 +52,10 @@ func SaveUsers(filename string, users []User) error {
 		return err
 	}
 	return ioutil.WriteFile(filename, data, 0644)
+}
+
+// HashLink returns a short hash (first 12 bytes of sha256) for a link
+func HashLink(link string) string {
+	h := sha256.Sum256([]byte(link))
+	return hex.EncodeToString(h[:12]) // 96 bits, very low collision for this use case
 }

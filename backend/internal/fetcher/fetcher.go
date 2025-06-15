@@ -90,13 +90,14 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 						if !strings.Contains(link, news.Prefix) {
 							link = news.Prefix + link
 						}
-						if _, sent := userLinks[link]; sent {
+						hash := utils.HashLink(link)
+						if _, sent := userLinks[hash]; sent {
 							continue // skip already sent links
 						}
 						if len(match) > 2 && utils.AnyContains(match, user.Topics) {
 							title := match[2]
 							msgs = append(msgs, notifier.GenerateMessage(title, link, user.Token))
-							newLinks = append(newLinks, link)
+							newLinks = append(newLinks, hash)
 						}
 					}
 				}
@@ -115,6 +116,9 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 			}
 			if len(newLinks) > 0 {
 				users[ui].LinksHistory = append(users[ui].LinksHistory, newLinks...)
+				if len(users[ui].LinksHistory) > utils.MaxLinksHistory {
+					users[ui].LinksHistory = users[ui].LinksHistory[len(users[ui].LinksHistory)-utils.MaxLinksHistory:]
+				}
 			}
 		}(ui, user)
 	}
