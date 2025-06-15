@@ -1,12 +1,33 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:news_alert/database_provider.dart';
+import 'package:sqflite/sqflite.dart';
 import 'home_screen.dart';
+
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  final db = await DatabaseProvider.instance.database;
+  if (message.notification != null) {
+    await db.insert(
+      'messages',
+      {
+        'title': message.notification!.title,
+        'link': message.data['link'] ?? '',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await dotenv.load();
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(const NewsAlertApp());
 }
 

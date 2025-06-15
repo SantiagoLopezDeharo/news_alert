@@ -10,6 +10,10 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database_provider.dart';
 import 'package:sqflite/sqflite.dart';
+import 'widgets/news_list.dart';
+import 'widgets/search_key_dropdown.dart';
+import 'widgets/modify_keys_button.dart';
+import 'widgets/delete_history_button.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -270,8 +274,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     const neonAccent = Colors.white;
-    const cardBg = Color(0xFF181A20);
-    const borderColor = Color(0xFF23272F);
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -307,24 +309,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 searchKeys != null
-                    ? DropdownButton<String>(
-                        dropdownColor: cardBg,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: neonAccent,
-                        ),
-                        value: selectedKey,
-                        borderRadius: BorderRadius.circular(14),
-                        underline: Container(),
-                        items: searchKeys!
-                            .map(
-                              (e) => DropdownMenuItem(
-                                value: e,
-                                child: Text(e, textAlign: TextAlign.center),
-                              ),
-                            )
-                            .toList(),
+                    ? SearchKeyDropdown(
+                        searchKeys: searchKeys!,
+                        selectedKey: selectedKey,
                         onChanged: (value) {
                           selectedKey = value ?? selectedKey;
                           _messagesRender = _messages
@@ -342,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       )
                     : const CircularProgressIndicator(),
                 const SizedBox(width: 10),
-                ElevatedButton(
+                ModifyKeysButton(
                   onPressed: () {
                     final keysWithoutAll =
                         searchKeys!.where((k) => k != "All").toList();
@@ -366,75 +353,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       }
                     });
                   },
-                  child: const Text('Modify'),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
+            DeleteHistoryButton(
               onPressed: delete,
-              child: Text("Borrar historial: $selectedKey"),
+              selectedKey: selectedKey,
             ),
             const SizedBox(height: 18),
             Expanded(
-              child: _messagesRender.isEmpty
-                  ? const Center(
-                      child: Text('No FCM messages received yet.'),
-                    )
-                  : ListView.separated(
-                      itemCount: _messagesRender.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (_, i) {
-                        final msg = _messagesRender[i];
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: cardBg.withOpacity(0.85),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(color: borderColor, width: 1.2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.white.withOpacity(0.04),
-                                blurRadius: 18,
-                                offset: const Offset(0, 6),
-                              ),
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.5),
-                                blurRadius: 32,
-                                offset: const Offset(0, 12),
-                              ),
-                            ],
-                          ),
-                          child: ListTile(
-                            key: ValueKey(i),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-                            title: SelectableText(
-                              msg['title'] ?? 'No Title',
-                              style: const TextStyle(
-                                color: neonAccent,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 18,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                            subtitle: Text(
-                              msg['link'] ?? '',
-                              style: TextStyle(color: neonAccent.withOpacity(0.7), fontSize: 14),
-                            ),
-                            onTap: () {
-                              final l = msg['link'];
-                              if (l != null) launchUrl(Uri.parse(l));
-                            },
-                            onLongPress: () => deleteItem(i),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              color: neonAccent.withOpacity(0.85),
-                              onPressed: () => deleteItem(i),
-                              tooltip: 'Delete',
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+              child: NewsList(
+                messages: _messagesRender,
+                onDelete: deleteItem,
+              ),
             ),
           ],
         ),
