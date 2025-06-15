@@ -27,86 +27,108 @@ func splitIntoChunks[T any](input []T, chunkSize int) [][]T {
 	return chunks
 }
 
-func generateMessages(matches [][]string, cl []string, prefix string, token string) []*messaging.Message {
-
-	ret := []*messaging.Message{}
-	if len(matches) == 0 {
-		return ret
-	}
-
-	for _, match := range matches {
-		if len(match) > 2 && utils.AnyContains(match, cl) {
-			title := match[2]
-			link := match[1]
-			if !strings.Contains(link, prefix) {
-				link = prefix + link
-			}
-
-			// fmt.Println(title + " --> " + link)
-			// fmt.Println()
-			ret = append(ret, notifier.GenerateMessage(title, link, token))
-		}
-	}
-
-	return ret
-}
-
-func Scan(listFile string, ctx context.Context, client *messaging.Client) {
-	cl, _ := utils.LoadList(listFile)
+func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
+	users, _ := utils.LoadUsers(usersFile)
 
 	var wg sync.WaitGroup
 	wg.Add(5)
 
 	var bbc_r, tg, nyt, abcl, az [][]string
 
-	go func() { defer wg.Done(); bbc_r = <-bbc() }()
-	go func() { defer wg.Done(); tg = <-theguardian() }()
-	go func() { defer wg.Done(); nyt = <-nytimes() }()
-	go func() { defer wg.Done(); abcl = <-abc() }()
-	go func() { defer wg.Done(); az = <-alijazeera() }()
+	go func() {
+		defer wg.Done()
+		bbc_r = <-fetchNews("https://www.bbc.com", "/news", `<a.*?href="([^"]*)".*?>.*?<h2 data-testid="card-headline".*?>([^</]*?)</h2>`)
+	}()
+	go func() {
+		defer wg.Done()
+		tg = <-fetchNews("https://www.theguardian.com", "/international", `<a href="([^"]*)".*?aria-label="([^"]*)".*?></a>`)
+	}()
+	go func() {
+		defer wg.Done()
+		nyt = <-fetchNews("https://www.nytimes.com", "/international", `<div class="css-cfnhvx"><a.*?href="([^"]*)"><div.*?><p.*?>([^</]*?)</p></div></a></div>`)
+	}()
+	go func() {
+		defer wg.Done()
+		abcl = <-fetchNews("https://abcnews.go.com", "/International", `<h2><a.*?href="([^"]*)".*?>.*?([^</]*?)</a></h2>`)
+	}()
+	go func() {
+		defer wg.Done()
+		az = <-fetchNews("https://www.aljazeera.com", "", `<a.*?href="([^"]*)".*?>.*?<span>([^</]*?)</span></a>`)
+	}()
 
 	wg.Wait()
 
-	tokenBytes, err := ioutil.ReadFile("fcm_token.txt")
-	if err != nil {
-		fmt.Println("Error reading FCM token:", err)
-		return
+	allNews := []struct {
+		Matches [][]string
+		Prefix  string
+	}{
+		{bbc_r, "https://www.bbc.com"},
+		{tg, "https://www.theguardian.com"},
+		{nyt, "https://www.nytimes.com"},
+		{abcl, "https://abcnews.go.com"},
+		{az, "https://www.aljazeera.com"},
 	}
 
-	token := string(tokenBytes)
-
-	msgs := []*messaging.Message{}
-
-	msgs = append(msgs, generateMessages(bbc_r, cl, "https://www.bbc.com", token)...)
-	msgs = append(msgs, generateMessages(tg, cl, "https://www.theguardian.com", token)...)
-	msgs = append(msgs, generateMessages(nyt, cl, "https://www.nytimes.com", token)...)
-	msgs = append(msgs, generateMessages(abcl, cl, "https://abcnews.go.com", token)...)
-	msgs = append(msgs, generateMessages(az, cl, "https://www.aljazeera.com", token)...)
-
-	chunks := splitIntoChunks(msgs, 500) // Relisticly for this use case there will never be more than 500 messages at a time, but this is a good practice anyways since Firebase won't admit to send a batch larger than 500 messages at once and it doesn't hurt performance.
-
-	wg.Add(len(chunks))
-
-	for _, chunk := range chunks {
-		if len(chunk) == 0 {
-			wg.Done()
-			continue
+	userWg := sync.WaitGroup{}
+	for ui, user := range users {
+		if user.Token == "" {
+			continue // skip users without a valid FCM token
 		}
-		go func(c []*messaging.Message) {
-			defer wg.Done()
-			notifier.SendNotifications(ctx, client, c)
-		}(chunk)
+		userWg.Add(1)
+		go func(ui int, user utils.User) {
+			defer userWg.Done()
+			msgs := []*messaging.Message{}
+			userLinks := make(map[string]struct{})
+			newLinks := []string{}
+			for _, l := range user.LinksHistory {
+				userLinks[l] = struct{}{}
+			}
+			for _, news := range allNews {
+				for _, match := range news.Matches {
+					if len(match) > 1 {
+						link := match[1]
+						if !strings.Contains(link, news.Prefix) {
+							link = news.Prefix + link
+						}
+						if _, sent := userLinks[link]; sent {
+							continue // skip already sent links
+						}
+						if len(match) > 2 && utils.AnyContains(match, user.Topics) {
+							title := match[2]
+							msgs = append(msgs, notifier.GenerateMessage(title, link, user.Token))
+							newLinks = append(newLinks, link)
+						}
+					}
+				}
+			}
+			chunks := splitIntoChunks(msgs, 500)
+			wg.Add(len(chunks))
+			for _, chunk := range chunks {
+				if len(chunk) == 0 {
+					wg.Done()
+					continue
+				}
+				go func(c []*messaging.Message) {
+					defer wg.Done()
+					notifier.SendNotifications(ctx, client, c)
+				}(chunk)
+			}
+			if len(newLinks) > 0 {
+				users[ui].LinksHistory = append(users[ui].LinksHistory, newLinks...)
+			}
+		}(ui, user)
 	}
-
+	userWg.Wait()
+	_ = utils.SaveUsers(usersFile, users)
 	wg.Wait()
 	fmt.Println("Scan completed at ", time.Now())
 }
-func bbc() <-chan [][]string {
+
+func fetchNews(url string, path string, reg string) chan [][]string {
 	ret := make(chan [][]string)
 
 	go func() {
-		url := "https://www.bbc.com"
-		resp, err := http.Get(url + "/news")
+		resp, err := http.Get(url + path)
 		if err != nil {
 			panic(err)
 		}
@@ -117,116 +139,10 @@ func bbc() <-chan [][]string {
 			panic(err)
 		}
 
-		re := regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<h2 data-testid="card-headline".*?>([^</]*?)</h2>`)
-
+		re := regexp.MustCompile(reg)
 		ret <- re.FindAllStringSubmatch(string(body), -1)
 		close(ret)
 	}()
 
 	return ret
-
-}
-
-func theguardian() chan [][]string {
-	ret := make(chan [][]string)
-
-	go func() {
-		url := "https://www.theguardian.com"
-		resp, err := http.Get(url + "/international")
-
-		if err != nil {
-			panic(err)
-		}
-
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		re := regexp.MustCompile(`<a href="([^"]*)".*?aria-label="([^"]*)".*?></a>`)
-		ret <- re.FindAllStringSubmatch(string(body), -1)
-		close(ret)
-	}()
-
-	return ret
-}
-
-func nytimes() chan [][]string {
-	ret := make(chan [][]string)
-
-	go func() {
-		url := "https://www.nytimes.com"
-		resp, err := http.Get(url + "/international")
-
-		if err != nil {
-			panic(err)
-		}
-
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		re := regexp.MustCompile(`<div class="css-cfnhvx"><a.*?href="([^"]*)"><div.*?><p.*?>([^</]*?)</p></div></a></div>`)
-		ret <- re.FindAllStringSubmatch(string(body), -1)
-		close(ret)
-	}()
-
-	return ret
-}
-
-func abc() <-chan [][]string {
-	ret := make(chan [][]string)
-
-	go func() {
-		url := "https://abcnews.go.com"
-		resp, err := http.Get(url + "/International")
-		if err != nil {
-			panic(err)
-		}
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		re := regexp.MustCompile(`<h2><a.*?href="([^"]*)".*?>.*?([^</]*?)</a></h2>`)
-
-		ret <- re.FindAllStringSubmatch(string(body), -1)
-		close(ret)
-	}()
-
-	return ret
-
-}
-
-func alijazeera() <-chan [][]string {
-	ret := make(chan [][]string)
-
-	go func() {
-		url := "https://www.aljazeera.com"
-		resp, err := http.Get(url)
-		if err != nil {
-			panic(err)
-		}
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		re := regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<span>([^</]*?)</span></a>`)
-
-		ret <- re.FindAllStringSubmatch(string(body), -1)
-		close(ret)
-	}()
-
-	return ret
-
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,6 +10,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -74,46 +76,61 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-void setupFCM() async {
-  FirebaseMessaging messaging = FirebaseMessaging.instance;
-
-  String? token = await messaging.getToken();
-
-  final apiUrl = dotenv.env['API_URL'];
-
-  if (token != null && apiUrl != null) {
-    final url = Uri.parse('$apiUrl/update-token');
-    await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: '{"token": "$token"}',
-    );
-  }
-
-  await FirebaseMessaging.instance.requestPermission();
-}
-
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _messages = [];
   List<Map<String, dynamic>> _messagesRender = [];
 
   List<String>? searchKeys;
   String selectedKey = "All";
+  String? user;
+
+  void setupFCM(String token) async {
+    final apiUrl = dotenv.env['API_URL'];
+
+    if (apiUrl != null) {
+      final url = Uri.parse('$apiUrl/set-token');
+      await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: '{"id":"$user","token": "$token"}',
+      );
+    }
+
+    await FirebaseMessaging.instance.requestPermission();
+  }
 
   void loadKeys() async {
     final apiUrl = dotenv.env['API_URL'];
     if (apiUrl == null) return;
-    final url = Uri.parse('$apiUrl/get-list');
+    final url = Uri.parse('$apiUrl/users?id=$user');
     final response = await http.get(url);
     if (response.statusCode == 200) {
-      final data = response.body;
+      final data = jsonDecode(response.body);
       List<String> keys = [];
       keys.add("All");
 
-      keys.addAll(List<String>.from(jsonDecode(data)));
+      if (data["topics"] != null) {
+        keys.addAll(List<String>.from(data["topics"]));
+      }
       selectedKey = keys.isNotEmpty ? keys[0] : "All";
       setState(() {
         searchKeys = keys;
+      });
+
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      String? token = await messaging.getToken();
+      if (token != null && data["token"] != token) {
+        setupFCM(token);
+      }
+    } else if (response.statusCode == 404) {
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      String? token = await messaging.getToken();
+      if (token == null) return;
+      setupFCM(token);
+
+      setState(() {
+        searchKeys = ["All"];
+        selectedKey = "All";
       });
     } else {
       showDialog(
@@ -139,9 +156,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    loadKeys();
-    setupFCM();
-
+    _initUser().then((_) {
+      loadKeys();
+    });
     WidgetsBinding.instance.addObserver(this);
     _loadStoredMessages();
 
@@ -154,6 +171,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _handleLink(msg.data);
       }
     });
+  }
+
+  Future<void> _initUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    user = prefs.getString('user');
+    if (user == null) {
+      final random = Random();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      user = 'user_${timestamp}_${random.nextInt(100000)}';
+      await prefs.setString('user', user!);
+    }
+
+    setState(() {});
   }
 
   @override
@@ -354,11 +384,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       if (newkeys != null) {
                         final apiUrl = dotenv.env['API_URL'];
 
-                        final url = Uri.parse('$apiUrl/update-list');
+                        final url = Uri.parse('$apiUrl/set-topics');
                         http.post(
                           url,
                           headers: {'Content-Type': 'application/json'},
-                          body: jsonEncode(newkeys),
+                          body: jsonEncode({"id": user, "topics": newkeys}),
                         );
 
                         setState(() {

@@ -2,69 +2,119 @@ package api
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
+	"news_alert_backend/internal/utils"
 )
 
 func StartServer() {
-	http.HandleFunc("/update-list", updateListHandler)
-	http.HandleFunc("/update-token", updateTokenHandler)
-	http.HandleFunc("/get-list", getListHandler)
+	http.HandleFunc("/users", usersHandler)
+	http.HandleFunc("/set-topics", setTopicsHandler)
+	http.HandleFunc("/set-token", setTokenHandler)
 	http.ListenAndServe(":8080", nil)
 }
 
-func updateListHandler(w http.ResponseWriter, r *http.Request) {
+func usersHandler(w http.ResponseWriter, r *http.Request) {
+	const usersFile = "users.json"
+
+	switch r.Method {
+	case http.MethodGet:
+		userID := r.URL.Query().Get("id")
+		if userID == "" {
+			http.Error(w, "Missing id parameter", http.StatusBadRequest)
+			return
+		}
+		users, err := utils.LoadUsers(usersFile)
+		if err != nil {
+			http.Error(w, "Failed to load users", http.StatusInternalServerError)
+			return
+		}
+		for _, u := range users {
+			if u.ID == userID {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(struct {
+					Topics []string `json:"topics"`
+					Token  string   `json:"token"`
+				}{u.Topics, u.Token})
+				return
+			}
+		}
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	default:
+		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func setTopicsHandler(w http.ResponseWriter, r *http.Request) {
+	const usersFile = "users.json"
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var list []string
-	if err := json.NewDecoder(r.Body).Decode(&list); err != nil {
+	var req struct {
+		ID     string   `json:"id"`
+		Topics []string `json:"topics"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if err := ioutil.WriteFile("list.json", mustJSON(list), 0644); err != nil {
-		http.Error(w, "Failed to write list.json", http.StatusInternalServerError)
+	if req.ID == "" {
+		http.Error(w, "User ID required", http.StatusBadRequest)
+		return
+	}
+	users, _ := utils.LoadUsers(usersFile)
+	found := false
+	for i, u := range users {
+		if u.ID == req.ID {
+			users[i].Topics = req.Topics
+			found = true
+			break
+		}
+	}
+	if !found {
+		users = append(users, utils.User{ID: req.ID, Topics: req.Topics})
+	}
+	if err := utils.SaveUsers(usersFile, users); err != nil {
+		http.Error(w, "Failed to save users", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-func updateTokenHandler(w http.ResponseWriter, r *http.Request) {
+func setTokenHandler(w http.ResponseWriter, r *http.Request) {
+	const usersFile = "users.json"
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	type Token struct {
+	var req struct {
+		ID    string `json:"id"`
 		Token string `json:"token"`
 	}
-	var t Token
-	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if err := ioutil.WriteFile("fcm_token.txt", []byte(t.Token), 0644); err != nil {
-		http.Error(w, "Failed to write fcm_token.txt", http.StatusInternalServerError)
+	if req.ID == "" {
+		http.Error(w, "User ID required", http.StatusBadRequest)
+		return
+	}
+	users, _ := utils.LoadUsers(usersFile)
+	found := false
+	for i, u := range users {
+		if u.ID == req.ID {
+			users[i].Token = req.Token
+			found = true
+			break
+		}
+	}
+	if !found {
+		users = append(users, utils.User{ID: req.ID, Token: req.Token})
+	}
+	if err := utils.SaveUsers(usersFile, users); err != nil {
+		http.Error(w, "Failed to save users", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-}
-
-func getListHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Only GET allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	data, err := ioutil.ReadFile("list.json")
-	if err != nil {
-		http.Error(w, "Failed to read list.json", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
-}
-
-func mustJSON(v interface{}) []byte {
-	b, _ := json.MarshalIndent(v, "", "  ")
-	return b
 }

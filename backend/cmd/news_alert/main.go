@@ -29,7 +29,7 @@ func main() {
 	go api.StartServer()
 
 	for {
-		fetcher.Scan("list.json", ctx, client)
-		time.Sleep(12 * time.Hour)
+		fetcher.Scan("users.json", ctx, client)
+		time.Sleep(time.Hour)
 	}
 }

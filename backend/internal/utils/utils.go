@@ -7,34 +7,6 @@ import (
 	"strings"
 )
 
-func SaveList(filename string, list []string) error {
-	data, err := json.MarshalIndent(list, "", "  ")
-	if err != nil {
-		return err
-	}
-	return ioutil.WriteFile(filename, data, 0644)
-}
-
-func LoadList(filename string) ([]string, error) {
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		if os.IsNotExist(err) {
-			emptyList := []string{}
-			emptyData, _ := json.Marshal(emptyList)
-			err = ioutil.WriteFile(filename, emptyData, 0644)
-			if err != nil {
-				return nil, err
-			}
-			return emptyList, nil
-		}
-		return nil, err
-	}
-
-	var list []string
-	err = json.Unmarshal(data, &list)
-	return list, err
-}
-
 func AnyContains(s []string, cl []string) bool {
 	for _, c := range cl {
 		if strings.Contains(strings.ToLower(s[2]), c) {
@@ -42,4 +14,38 @@ func AnyContains(s []string, cl []string) bool {
 		}
 	}
 	return false
+}
+
+type User struct {
+	ID           string   `json:"id"`    // Stable user identifier (e.g., UUID or account ID)
+	Token        string   `json:"token"` // FCM token (can change)
+	Topics       []string `json:"topics"`
+	LinksHistory []string `json:"links_history"` // History of links sent to the user
+}
+
+func LoadUsers(filename string) ([]User, error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			empty := []User{}
+			emptyData, _ := json.Marshal(empty)
+			err = ioutil.WriteFile(filename, emptyData, 0644)
+			if err != nil {
+				return nil, err
+			}
+			return empty, nil
+		}
+		return nil, err
+	}
+	var users []User
+	err = json.Unmarshal(data, &users)
+	return users, err
+}
+
+func SaveUsers(filename string, users []User) error {
+	data, err := json.MarshalIndent(users, "", "  ")
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(filename, data, 0644)
 }
