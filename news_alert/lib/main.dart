@@ -36,7 +36,82 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await dotenv.load();
 
-  runApp(const MaterialApp(title: 'News Alert', home: HomeScreen()));
+  runApp(const NewsAlertApp());
+}
+
+class NewsAlertApp extends StatelessWidget {
+  const NewsAlertApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const Color neonAccent = Color(0xFF00FFC6); // Softer neon
+    const Color darkBg = Colors.black;
+    const Color cardBg = Color(0xFF181A20);
+    const Color borderColor = Color(0xFF23272F);
+    return MaterialApp(
+      title: 'News Alert',
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: darkBg,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: darkBg,
+          foregroundColor: neonAccent,
+          elevation: 0,
+          titleTextStyle: TextStyle(
+            color: Color(0xFF00FFC6),
+            fontWeight: FontWeight.w700,
+            fontSize: 22,
+            letterSpacing: 1.1,
+          ),
+        ),
+        cardColor: cardBg,
+        cardTheme: CardTheme(
+          color: cardBg,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: borderColor, width: 1.2),
+          ),
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: neonAccent,
+            foregroundColor: darkBg,
+            textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+        dropdownMenuTheme: DropdownMenuThemeData(
+          menuStyle: MenuStyle(
+            backgroundColor: WidgetStateProperty.all(cardBg),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: cardBg,
+          labelStyle: const TextStyle(color: neonAccent),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: neonAccent),
+          ),
+        ),
+        textTheme: const TextTheme(
+          bodyMedium: TextStyle(color: Colors.white, fontSize: 16),
+          bodyLarge: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          titleMedium: TextStyle(color: Color(0xFF00FFC6), fontWeight: FontWeight.w700),
+        ),
+        iconTheme: const IconThemeData(color: neonAccent, size: 22),
+        dividerColor: borderColor,
+        useMaterial3: true,
+      ),
+      home: const HomeScreen(),
+    );
+  }
 }
 
 class _DatabaseProvider {
@@ -134,6 +209,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
     } else {
       showDialog(
+        // ignore: use_build_context_synchronously
         context: context,
         builder: (_) {
           return AlertDialog(
@@ -327,10 +403,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    const neonAccent = Colors.white;
+    const cardBg = Color(0xFF181A20);
+    const borderColor = Color(0xFF23272F);
     return Scaffold(
-      appBar: AppBar(title: const Text('News Alerts')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text(
+          'News Alerts',
+          style: TextStyle(
+            color: neonAccent,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+            letterSpacing: 1.2,
+            shadows: [
+              Shadow(
+                blurRadius: 18,
+                color: Colors.white.withOpacity(0.9),
+                offset: const Offset(0, 0),
+              ),
+              Shadow(
+                blurRadius: 32,
+                color: Colors.white.withOpacity(0.5),
+                offset: const Offset(0, 0),
+              ),
+            ],
+          ),
+        ),
+        backgroundColor: Colors.black,
+        elevation: 0,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         child: Column(
           children: [
             Row(
@@ -338,14 +442,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               children: [
                 searchKeys != null
                     ? DropdownButton<String>(
-                        dropdownColor: const Color.fromARGB(255, 196, 196, 196),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        dropdownColor: cardBg,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Colors.black,
+                          color: neonAccent,
                         ),
                         value: selectedKey,
+                        borderRadius: BorderRadius.circular(14),
+                        underline: Container(),
                         items: searchKeys!
                             .map(
                               (e) => DropdownMenuItem(
@@ -370,7 +475,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         },
                       )
                     : const CircularProgressIndicator(),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 ElevatedButton(
                   onPressed: () {
                     final keysWithoutAll =
@@ -383,14 +488,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ).then((newkeys) {
                       if (newkeys != null) {
                         final apiUrl = dotenv.env['API_URL'];
-
                         final url = Uri.parse('$apiUrl/set-topics');
                         http.post(
                           url,
                           headers: {'Content-Type': 'application/json'},
                           body: jsonEncode({"id": user, "topics": newkeys}),
                         );
-
                         setState(() {
                           searchKeys = ["All", ...newkeys];
                         });
@@ -401,34 +504,66 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             ElevatedButton(
               onPressed: delete,
               child: Text("Borrar historial: $selectedKey"),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 18),
             Expanded(
               child: _messagesRender.isEmpty
                   ? const Center(
                       child: Text('No FCM messages received yet.'),
                     )
-                  : ListView.builder(
+                  : ListView.separated(
                       itemCount: _messagesRender.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (_, i) {
                         final msg = _messagesRender[i];
-                        return Card(
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: cardBg.withOpacity(0.85),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(color: borderColor, width: 1.2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.04),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.5),
+                                blurRadius: 32,
+                                offset: const Offset(0, 12),
+                              ),
+                            ],
+                          ),
                           child: ListTile(
                             key: ValueKey(i),
-                            title: SelectableText(msg['title'] ?? 'No Title'),
-                            subtitle: Text(msg['link'] ?? ''),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+                            title: SelectableText(
+                              msg['title'] ?? 'No Title',
+                              style: const TextStyle(
+                                color: neonAccent,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                            subtitle: Text(
+                              msg['link'] ?? '',
+                              style: TextStyle(color: neonAccent.withOpacity(0.7), fontSize: 14),
+                            ),
                             onTap: () {
                               final l = msg['link'];
                               if (l != null) launchUrl(Uri.parse(l));
                             },
                             onLongPress: () => deleteItem(i),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete),
+                              icon: const Icon(Icons.delete_outline),
+                              color: neonAccent.withOpacity(0.85),
                               onPressed: () => deleteItem(i),
+                              tooltip: 'Delete',
                             ),
                           ),
                         );
