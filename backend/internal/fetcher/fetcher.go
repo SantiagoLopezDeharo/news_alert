@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"firebase.google.com/go/v4/messaging"
+	"github.com/PuerkitoBio/goquery"
 )
 
 func splitIntoChunks[T any](input []T, chunkSize int) [][]T {
@@ -31,9 +32,9 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 	users, _ := utils.LoadUsers(usersFile)
 
 	var wg sync.WaitGroup
-	wg.Add(5)
+	wg.Add(6)
 
-	var bbc_r, tg, nyt, abcl, az [][]string
+	var bbc_r, tg, nyt, abcl, az, mvdn [][]string
 
 	go func() {
 		defer wg.Done()
@@ -55,6 +56,10 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 		defer wg.Done()
 		az = <-fetchNews("https://www.aljazeera.com", "", `<a.*?href="([^"]*)".*?>.*?<span>([^</]*?)</span></a>`)
 	}()
+	go func() {
+		defer wg.Done()
+		mvdn = <-mvd()
+	}()
 
 	wg.Wait()
 
@@ -67,6 +72,7 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 		{nyt, "https://www.nytimes.com"},
 		{abcl, "https://abcnews.go.com"},
 		{az, "https://www.aljazeera.com"},
+		{mvdn, "https://www.montevideo.com.uy"},
 	}
 
 	userWg := sync.WaitGroup{}
@@ -146,6 +152,82 @@ func fetchNews(url string, path string, reg string) chan [][]string {
 		re := regexp.MustCompile(reg)
 		ret <- re.FindAllStringSubmatch(string(body), -1)
 		close(ret)
+	}()
+
+	return ret
+}
+
+func mvd() chan [][]string {
+	ret := make(chan [][]string)
+	go func() {
+		defer close(ret)
+		url := "https://www.montevideo.com.uy"
+		headers := map[string]string{
+			"User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+			"Accept-Language": "es-ES,es;q=0.9",
+		}
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			ret <- [][]string{}
+			return
+		}
+		for k, v := range headers {
+			req.Header.Add(k, v)
+		}
+		res, err := client.Do(req)
+		if err != nil {
+			ret <- [][]string{}
+			return
+		}
+		defer res.Body.Close()
+
+		if res.StatusCode != 200 {
+			ret <- [][]string{}
+			return
+		}
+		doc, err := goquery.NewDocumentFromReader(res.Body)
+		if err != nil {
+			ret <- [][]string{}
+			return
+		}
+		var resultados [][]string
+		urlsVistas := make(map[string]bool)
+		doc.Find("article").Each(func(i int, s *goquery.Selection) {
+			clases, _ := s.Attr("class")
+			if !strings.Contains(clases, "noticia") {
+				return
+			}
+
+			enlace := s.Find("a")
+			titulo := s.Find("h2, h3, h4").First()
+
+			if enlace.Length() == 0 || titulo.Length() == 0 {
+				return
+			}
+
+			href, exists := enlace.Attr("href")
+			if !exists {
+				return
+			}
+
+			urlNoticia := href
+			if !strings.HasPrefix(urlNoticia, "http") {
+				urlNoticia = "https://www.montevideo.com.uy" + href
+			}
+
+			if urlsVistas[urlNoticia] {
+				return
+			}
+			urlsVistas[urlNoticia] = true
+
+			resultados = append(resultados, []string{
+				"",            // Padding
+				urlNoticia,    // URL
+				titulo.Text(), // title
+			})
+		})
+		ret <- resultados
 	}()
 
 	return ret

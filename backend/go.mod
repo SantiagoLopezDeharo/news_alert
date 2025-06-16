@@ -4,7 +4,11 @@ go 1.23.0
 
 toolchain go1.24.4
 
-require firebase.google.com/go v3.13.0+incompatible
+require (
+	firebase.google.com/go/v4 v4.16.1
+	github.com/PuerkitoBio/goquery v1.10.3
+	google.golang.org/api v0.236.0
+)
 
 require (
 	cel.dev/expr v0.23.1 // indirect
@@ -17,11 +21,11 @@ require (
 	cloud.google.com/go/longrunning v0.6.7 // indirect
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/storage v1.55.0 // indirect
-	firebase.google.com/go/v4 v4.16.1 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.27.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.51.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.51.0 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
@@ -55,8 +59,6 @@ require (
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
-	google.golang.org/api v0.236.0 // indirect
-	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/appengine/v2 v2.0.6 // indirect
 	google.golang.org/genproto v0.0.0-20250505200425-f936aa4a68b2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9 // indirect

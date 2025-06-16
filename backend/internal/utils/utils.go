@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const MaxLinksHistory = 100 // Only keep the last 100 links per user
+const MaxLinksHistory = 200 // Only keep the last 200 links per user
 
 func AnyContains(s []string, cl []string) bool {
 	for _, c := range cl {
