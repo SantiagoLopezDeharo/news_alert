@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+// ignore: must_be_immutable
 class Modifykeys extends StatefulWidget {
   Modifykeys({super.key, required this.keys});
   List<String> keys;
@@ -13,9 +14,9 @@ class _ModifykeysState extends State<Modifykeys> {
 
   @override
   Widget build(BuildContext context) {
-    final neonAccent = const Color(0xFF00FFC6);
-    final cardBg = const Color(0xFF181A20);
-    final borderColor = const Color(0xFF23272F);
+    const neonAccent = Color(0xFF00FFC6);
+    const cardBg = Color(0xFF181A20);
+    const borderColor = Color(0xFF23272F);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Modify Keys'),
@@ -39,7 +40,7 @@ class _ModifykeysState extends State<Modifykeys> {
                           vertical: 8, horizontal: 0),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
-                        side: BorderSide(color: borderColor, width: 1.2),
+                        side: const BorderSide(color: borderColor, width: 1.2),
                       ),
                       elevation: 0,
                       child: Row(
@@ -50,7 +51,7 @@ class _ModifykeysState extends State<Modifykeys> {
                                 vertical: 12, horizontal: 8),
                             child: Text(
                               key,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 17,
                                 color: neonAccent,
                                 fontWeight: FontWeight.w600,
@@ -95,15 +96,15 @@ class _ModifykeysState extends State<Modifykeys> {
                   Expanded(
                     child: TextField(
                       controller: newKeyController,
-                      style: TextStyle(color: neonAccent),
+                      style: const TextStyle(color: neonAccent),
                       decoration: InputDecoration(
                         labelText: 'Enter new key',
-                        labelStyle: TextStyle(color: neonAccent),
+                        labelStyle: const TextStyle(color: neonAccent),
                         filled: true,
                         fillColor: cardBg,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: neonAccent),
+                          borderSide: const BorderSide(color: neonAccent),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),

@@ -274,6 +274,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     const neonAccent = Colors.white;
+    const cardBg = Color(0xFF181A20);
+
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -362,6 +364,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               selectedKey: selectedKey,
             ),
             const SizedBox(height: 18),
+            TextField(
+              style: const TextStyle(color: neonAccent),
+              decoration: InputDecoration(
+                labelText: 'search by title',
+                labelStyle: const TextStyle(color: neonAccent),
+                filled: true,
+                fillColor: cardBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: neonAccent),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+              onChanged: (value) {
+                if (value.isEmpty) {
+                  _messagesRender = _messages
+                      .where(
+                        (msg) =>
+                            selectedKey == "All" ||
+                            msg['title']?.toLowerCase().contains(
+                                      selectedKey,
+                                    ) ==
+                                true,
+                      )
+                      .toList();
+                } else {
+                  _messagesRender = _messages
+                      .where(
+                        (msg) =>
+                            (selectedKey == "All" ||
+                                msg['title']
+                                    ?.toLowerCase()
+                                    .contains(selectedKey)) &&
+                            msg['title']
+                                    ?.toLowerCase()
+                                    .contains(value.toLowerCase()) ==
+                                true,
+                      )
+                      .toList();
+                }
+                setState(() {});
+              },
+            ),
+            const SizedBox(height: 12),
             Expanded(
               child: NewsList(
                 messages: _messagesRender,
