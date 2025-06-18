@@ -86,6 +86,7 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 			msgs := []*messaging.Message{}
 			userLinks := make(map[string]struct{})
 			newLinks := []string{}
+			newLinksSet := make(map[string]struct{})
 			for _, l := range user.LinksHistory {
 				userLinks[l] = struct{}{}
 			}
@@ -100,10 +101,14 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 						if _, sent := userLinks[hash]; sent {
 							continue // skip already sent links
 						}
+						if _, sent := newLinksSet[hash]; sent {
+							continue // skip already processed links in this batch
+						}
 						if len(match) > 2 && utils.AnyContains(match, user.Topics) {
 							title := match[2]
 							msgs = append(msgs, notifier.GenerateMessage(title, link, user.Token))
 							newLinks = append(newLinks, hash)
+							newLinksSet[hash] = struct{}{} // mark as processed
 						}
 					}
 				}
