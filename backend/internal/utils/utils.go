@@ -4,21 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"io/ioutil"
 	"os"
-	"strings"
 )
 
 const MaxLinksHistory = 200 // Only keep the last 200 links per user
-
-func AnyContains(s []string, cl []string) bool {
-	for _, c := range cl {
-		if strings.Contains(strings.ToLower(s[2]), c) {
-			return true
-		}
-	}
-	return false
-}
 
 type User struct {
 	ID           string   `json:"id"`    // Stable user identifier (e.g., UUID or account ID)
@@ -28,12 +17,12 @@ type User struct {
 }
 
 func LoadUsers(filename string) ([]User, error) {
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
 			empty := []User{}
 			emptyData, _ := json.Marshal(empty)
-			err = ioutil.WriteFile(filename, emptyData, 0644)
+			err = os.WriteFile(filename, emptyData, 0644)
 			if err != nil {
 				return nil, err
 			}
@@ -51,7 +40,7 @@ func SaveUsers(filename string, users []User) error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filename, data, 0644)
+	return os.WriteFile(filename, data, 0644)
 }
 
 // HashLink returns a short hash (first 12 bytes of sha256) for a link

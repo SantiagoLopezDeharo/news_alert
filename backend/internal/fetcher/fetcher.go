@@ -3,7 +3,7 @@ package fetcher
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"news_alert_backend/internal/notifier"
 	"news_alert_backend/internal/utils"
@@ -15,6 +15,18 @@ import (
 	"firebase.google.com/go/v4/messaging"
 	"github.com/PuerkitoBio/goquery"
 )
+
+var (
+	bbcReg  = regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<h2 data-testid="card-headline".*?>([^</]*?)</h2>`)
+	tgReg   = regexp.MustCompile(`<a href="([^"]*)".*?aria-label="([^"]*)".*?></a>`)
+	nytReg  = regexp.MustCompile(`<div class="css-cfnhvx"><a.*?href="([^"]*)"><div.*?><p.*?>([^</]*?)</p></div></a></div>`)
+	abclReg = regexp.MustCompile(`<h2><a.*?href="([^"]*)".*?>.*?([^</]*?)</a></h2>`)
+	azReg   = regexp.MustCompile(`<a.*?href="([^"]*)".*?>.*?<span>([^</]*?)</span></a>`)
+)
+
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
 
 func splitIntoChunks[T any](input []T, chunkSize int) [][]T {
 	var chunks [][]T
@@ -29,7 +41,11 @@ func splitIntoChunks[T any](input []T, chunkSize int) [][]T {
 }
 
 func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
-	users, _ := utils.LoadUsers(usersFile)
+	users, err := utils.LoadUsers(usersFile)
+	if err != nil {
+		fmt.Printf("Error loading users: %v\n", err)
+		return
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(6)
@@ -38,27 +54,27 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 
 	go func() {
 		defer wg.Done()
-		bbc_r = <-fetchNews("https://www.bbc.com", "/news", `<a.*?href="([^"]*)".*?>.*?<h2 data-testid="card-headline".*?>([^</]*?)</h2>`)
+		bbc_r = fetchNews("https://www.bbc.com", "/news", bbcReg)
 	}()
 	go func() {
 		defer wg.Done()
-		tg = <-fetchNews("https://www.theguardian.com", "/international", `<a href="([^"]*)".*?aria-label="([^"]*)".*?></a>`)
+		tg = fetchNews("https://www.theguardian.com", "/international", tgReg)
 	}()
 	go func() {
 		defer wg.Done()
-		nyt = <-fetchNews("https://www.nytimes.com", "/international", `<div class="css-cfnhvx"><a.*?href="([^"]*)"><div.*?><p.*?>([^</]*?)</p></div></a></div>`)
+		nyt = fetchNews("https://www.nytimes.com", "/international", nytReg)
 	}()
 	go func() {
 		defer wg.Done()
-		abcl = <-fetchNews("https://abcnews.go.com", "/International", `<h2><a.*?href="([^"]*)".*?>.*?([^</]*?)</a></h2>`)
+		abcl = fetchNews("https://abcnews.go.com", "/International", abclReg)
 	}()
 	go func() {
 		defer wg.Done()
-		az = <-fetchNews("https://www.aljazeera.com", "", `<a.*?href="([^"]*)".*?>.*?<span>([^</]*?)</span></a>`)
+		az = fetchNews("https://www.aljazeera.com", "", azReg)
 	}()
 	go func() {
 		defer wg.Done()
-		mvdn = <-mvd()
+		mvdn = mvd()
 	}()
 
 	wg.Wait()
@@ -75,10 +91,37 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 		{mvdn, "https://www.montevideo.com.uy"},
 	}
 
+	type NewsItem struct {
+		Link  string
+		Hash  string
+		Title string
+	}
+	var collectedNews []NewsItem
+
+	for _, news := range allNews {
+		if news.Matches == nil {
+			continue
+		}
+		for _, match := range news.Matches {
+			if len(match) > 1 {
+				link := match[1]
+				if !strings.Contains(link, news.Prefix) {
+					link = news.Prefix + link
+				}
+				hash := utils.HashLink(link)
+				title := ""
+				if len(match) > 2 {
+					title = match[2]
+				}
+				collectedNews = append(collectedNews, NewsItem{Link: link, Hash: hash, Title: title})
+			}
+		}
+	}
+
 	userWg := sync.WaitGroup{}
 	for ui, user := range users {
 		if user.Token == "" {
-			continue // skip users without a valid FCM token
+			continue
 		}
 		userWg.Add(1)
 		go func(ui int, user utils.User) {
@@ -90,41 +133,37 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 			for _, l := range user.LinksHistory {
 				userLinks[l] = struct{}{}
 			}
-			for _, news := range allNews {
-				for _, match := range news.Matches {
-					if len(match) > 1 {
-						link := match[1]
-						if !strings.Contains(link, news.Prefix) {
-							link = news.Prefix + link
-						}
-						hash := utils.HashLink(link)
-						if _, sent := userLinks[hash]; sent {
-							continue // skip already sent links
-						}
-						if _, sent := newLinksSet[hash]; sent {
-							continue // skip already processed links in this batch
-						}
-						if len(match) > 2 && utils.AnyContains(match, user.Topics) {
-							title := match[2]
-							msgs = append(msgs, notifier.GenerateMessage(title, link, user.Token))
-							newLinks = append(newLinks, hash)
-							newLinksSet[hash] = struct{}{} // mark as processed
-						}
-					}
+
+			for _, item := range collectedNews {
+				if _, sent := userLinks[item.Hash]; sent {
+					continue
+				}
+				if _, sent := newLinksSet[item.Hash]; sent {
+					continue
+				}
+
+				if item.Title != "" && containsTopic(item.Title, user.Topics) {
+					msgs = append(msgs, notifier.GenerateMessage(item.Title, item.Link, user.Token))
+					newLinks = append(newLinks, item.Hash)
+					newLinksSet[item.Hash] = struct{}{}
 				}
 			}
+
 			chunks := splitIntoChunks(msgs, 500)
-			wg.Add(len(chunks))
+			chunkWg := sync.WaitGroup{}
+			chunkWg.Add(len(chunks))
 			for _, chunk := range chunks {
 				if len(chunk) == 0 {
-					wg.Done()
+					chunkWg.Done()
 					continue
 				}
 				go func(c []*messaging.Message) {
-					defer wg.Done()
+					defer chunkWg.Done()
 					notifier.SendNotifications(ctx, client, c)
 				}(chunk)
 			}
+			chunkWg.Wait()
+
 			if len(newLinks) > 0 {
 				users[ui].LinksHistory = append(users[ui].LinksHistory, newLinks...)
 				if len(users[ui].LinksHistory) > utils.MaxLinksHistory {
@@ -134,106 +173,104 @@ func Scan(usersFile string, ctx context.Context, client *messaging.Client) {
 		}(ui, user)
 	}
 	userWg.Wait()
-	_ = utils.SaveUsers(usersFile, users)
-	wg.Wait()
+	if err := utils.SaveUsers(usersFile, users); err != nil {
+		fmt.Printf("Error saving users: %v\n", err)
+	}
 	fmt.Println("Scan completed at ", time.Now())
 }
 
-func fetchNews(url string, path string, reg string) chan [][]string {
-	ret := make(chan [][]string)
-
-	go func() {
-		resp, err := http.Get(url + path)
-		if err != nil {
-			panic(err)
+func containsTopic(title string, topics []string) bool {
+	titleLower := strings.ToLower(title)
+	for _, topic := range topics {
+		if strings.Contains(titleLower, strings.ToLower(topic)) {
+			return true
 		}
-		defer resp.Body.Close()
-
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		re := regexp.MustCompile(reg)
-		ret <- re.FindAllStringSubmatch(string(body), -1)
-		close(ret)
-	}()
-
-	return ret
+	}
+	return false
 }
 
-func mvd() chan [][]string {
-	ret := make(chan [][]string)
-	go func() {
-		defer close(ret)
-		url := "https://www.montevideo.com.uy"
-		headers := map[string]string{
-			"User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-			"Accept-Language": "es-ES,es;q=0.9",
-		}
-		client := &http.Client{}
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			ret <- [][]string{}
+func fetchNews(url string, path string, re *regexp.Regexp) [][]string {
+	resp, err := httpClient.Get(url + path)
+	if err != nil {
+		fmt.Printf("Error fetching %s: %v\n", url, err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("Error reading body from %s: %v\n", url, err)
+		return nil
+	}
+
+	return re.FindAllStringSubmatch(string(body), -1)
+}
+
+func mvd() [][]string {
+	url := "https://www.montevideo.com.uy"
+	headers := map[string]string{
+		"User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+		"Accept-Language": "es-ES,es;q=0.9",
+	}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fmt.Printf("Error creating request for mvd: %v\n", err)
+		return nil
+	}
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
+	res, err := httpClient.Do(req)
+	if err != nil {
+		fmt.Printf("Error fetching mvd: %v\n", err)
+		return nil
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		fmt.Printf("Error fetching mvd, status: %d\n", res.StatusCode)
+		return nil
+	}
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		fmt.Printf("Error parsing mvd: %v\n", err)
+		return nil
+	}
+	var resultados [][]string
+	urlsVistas := make(map[string]bool)
+	doc.Find("article").Each(func(i int, s *goquery.Selection) {
+		clases, _ := s.Attr("class")
+		if !strings.Contains(clases, "noticia") {
 			return
 		}
-		for k, v := range headers {
-			req.Header.Add(k, v)
-		}
-		res, err := client.Do(req)
-		if err != nil {
-			ret <- [][]string{}
+
+		enlace := s.Find("a")
+		titulo := s.Find("h2, h3, h4").First()
+
+		if enlace.Length() == 0 || titulo.Length() == 0 {
 			return
 		}
-		defer res.Body.Close()
 
-		if res.StatusCode != 200 {
-			ret <- [][]string{}
+		href, exists := enlace.Attr("href")
+		if !exists {
 			return
 		}
-		doc, err := goquery.NewDocumentFromReader(res.Body)
-		if err != nil {
-			ret <- [][]string{}
+
+		urlNoticia := href
+		if !strings.HasPrefix(urlNoticia, "http") {
+			urlNoticia = "https://www.montevideo.com.uy" + href
+		}
+
+		if urlsVistas[urlNoticia] {
 			return
 		}
-		var resultados [][]string
-		urlsVistas := make(map[string]bool)
-		doc.Find("article").Each(func(i int, s *goquery.Selection) {
-			clases, _ := s.Attr("class")
-			if !strings.Contains(clases, "noticia") {
-				return
-			}
+		urlsVistas[urlNoticia] = true
 
-			enlace := s.Find("a")
-			titulo := s.Find("h2, h3, h4").First()
-
-			if enlace.Length() == 0 || titulo.Length() == 0 {
-				return
-			}
-
-			href, exists := enlace.Attr("href")
-			if !exists {
-				return
-			}
-
-			urlNoticia := href
-			if !strings.HasPrefix(urlNoticia, "http") {
-				urlNoticia = "https://www.montevideo.com.uy" + href
-			}
-
-			if urlsVistas[urlNoticia] {
-				return
-			}
-			urlsVistas[urlNoticia] = true
-
-			resultados = append(resultados, []string{
-				"",            // Padding
-				urlNoticia,    // URL
-				titulo.Text(), // title
-			})
+		resultados = append(resultados, []string{
+			"",            // Padding
+			urlNoticia,    // URL
+			titulo.Text(), // title
 		})
-		ret <- resultados
-	}()
-
-	return ret
+	})
+	return resultados
 }
