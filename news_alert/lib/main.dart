@@ -57,7 +57,7 @@ class NewsAlertApp extends StatelessWidget {
           ),
         ),
         cardColor: cardBg,
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           color: cardBg,
           elevation: 0,
           shape: RoundedRectangleBorder(
