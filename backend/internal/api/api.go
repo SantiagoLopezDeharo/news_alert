@@ -10,7 +10,7 @@ func StartServer() {
 	http.HandleFunc("/users", usersHandler)
 	http.HandleFunc("/set-topics", setTopicsHandler)
 	http.HandleFunc("/set-token", setTokenHandler)
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":3001", nil)
 }
 
 func usersHandler(w http.ResponseWriter, r *http.Request) {
